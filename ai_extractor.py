@@ -24,15 +24,23 @@ COLUMNS = [
 ]
 
 # 広告パターン定義（正規表現）
+# Google広告として判定するパターン：
+#   ① "GOOGLE" 単体（広告代理店カテゴリ前提）
+#   ② "GOOGLE*ADS〇〇〇 GOOGLE JAPAN G." 形式
+#   ③ 従来の Google Ads / Google*Ads 等
 AD_PATTERNS = {
     "Google広告": re.compile(
-        r"(Google\s*[\*\-\s]?\s*(Ads?|広告|Adwords?|AdSense)|"
-        r"GOOGLE\s*[\*\-\s]?\s*(ADS?|ADWORDS?))",
+        r"GOOGLE\*ADS\w*"
+        r"|GOOGLE\s+JAPAN"
+        r"|Google\s*[\*\-\s]?\s*(Ads?|広告|Adwords?|AdSense)"
+        r"|GOOGLE\s*[\*\-]\s*(ADS?|ADWORDS?)"
+        r"|(?<![A-Z0-9\*])GOOGLE(?!\s*(ONE|PLAY|MAPS|DRIVE|PAY|\*GOOGLE))",
         re.IGNORECASE,
     ),
     "Meta広告": re.compile(
         r"(Meta\s*[\*\-\s]?\s*(Ads?|広告)|"
         r"META\s*[\*\-\s]?\s*(ADS?)|"
+        r"FACEBK\s*[\*\-\s]?\w*|"                  # FACEBK *HAXQGHDJE2 等
         r"Facebook\s*[\*\-\s]?\s*(Ads?|広告)|"
         r"FACEBOOK\s*[\*\-\s]?\s*(ADS?))",
         re.IGNORECASE,
