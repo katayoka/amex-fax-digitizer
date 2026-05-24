@@ -1,0 +1,6 @@
+﻿streamlit
+anthropic
+pymupdf
+pypdf
+pdfplumber
+pandas
