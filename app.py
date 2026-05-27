@@ -26,6 +26,8 @@ if "receipts" not in st.session_state:
     st.session_state.receipts = {}   # {idx: uploaded_file}
 if "confirmed" not in st.session_state:
     st.session_state.confirmed = False
+if "ad_details" not in st.session_state:
+    st.session_state.ad_details = {}
 if "tax_review" not in st.session_state:
     # {idx: {"formal_name": str, "tax_rate_display": str, "unmatched": bool}}
     st.session_state.tax_review = {}
@@ -75,13 +77,14 @@ if run_btn and uploaded_file is not None and api_key:
         "（ページ数によって数秒〜数十秒かかります）"
     ):
         try:
-            df_result = extract_and_aggregate(
+            df_result, ad_details = extract_and_aggregate(
                 file_bytes=uploaded_file.read(),
                 filename=uploaded_file.name,
                 month_label=month_label,
                 api_key=api_key,
             )
             st.session_state.df = df_result
+            st.session_state.ad_details = ad_details
             st.session_state.ocr_done = True
             st.session_state.confirmed = False
             st.session_state.receipts = {}
@@ -184,7 +187,7 @@ else:
 
             with st.expander(
                 f"{label_icon}  {item['OCR備考（元データ）']}  →  {item['正式備考名（Bill One用）']}",
-                expanded=is_unmatched,
+                expanded=True,
             ):
                 col_name, col_tax = st.columns([2, 1])
 
@@ -221,6 +224,59 @@ else:
                         st.session_state.tax_review[idx]["unmatched"] = False
                         st.success(f"✅ 「{kw}」をマスタに登録しました")
                         st.rerun()
+
+    # ------------------------------------------------------------------
+    # Step 2.6：広告費内訳CSVダウンロード
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📋 Step 2.6 ｜ 広告費内訳CSVダウンロード")
+
+    if "ad_details" in st.session_state and st.session_state.ad_details:
+        col_g, col_m = st.columns(2)
+
+        with col_g:
+            google_details = st.session_state.ad_details.get("Google広告", [])
+            if google_details:
+                import io as _io
+                import pandas as _pd
+                g_df = _pd.DataFrame(google_details, columns=["日付", "金額(税込)"])
+                g_buf = _io.StringIO()
+                g_df.to_csv(g_buf, index=False, encoding="utf-8")
+                g_total = g_df["金額(税込)"].sum()
+                st.write(f"**Google広告内訳** （{len(google_details)}件 / 合計 ¥{g_total:,}）")
+                st.dataframe(g_df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    label="⬇️ Google広告内訳CSVをダウンロード",
+                    data=g_buf.getvalue().encode("utf-8"),
+                    file_name=f"google_ad_detail_{month_label.replace('年','').replace('月','')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.info("Google広告の明細データがありません")
+
+        with col_m:
+            meta_details = st.session_state.ad_details.get("Meta広告", [])
+            if meta_details:
+                import io as _io
+                import pandas as _pd
+                m_df = _pd.DataFrame(meta_details, columns=["日付", "金額(税込)"])
+                m_buf = _io.StringIO()
+                m_df.to_csv(m_buf, index=False, encoding="utf-8")
+                m_total = m_df["金額(税込)"].sum()
+                st.write(f"**Meta広告内訳** （{len(meta_details)}件 / 合計 ¥{m_total:,}）")
+                st.dataframe(m_df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    label="⬇️ Meta広告内訳CSVをダウンロード",
+                    data=m_buf.getvalue().encode("utf-8"),
+                    file_name=f"meta_ad_detail_{month_label.replace('年','').replace('月','')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.info("Meta広告の明細データがありません")
+    else:
+        st.info("AIを実行すると広告費の内訳データが表示されます")
 
     # ------------------------------------------------------------------
     # 金額集計セクション
@@ -318,7 +374,7 @@ else:
 
         # Bill One CSV ダウンロード
         st.markdown("---")
-        st.subheader("📥 Bill One形式 CSVダウンロード")
+        st.subheader("📥 Step 5 ｜ Bill One形式 CSVダウンロード")
 
         try:
             # tax_reviewの内容をDataFrameに反映してからCSV化
@@ -336,6 +392,11 @@ else:
                 mime="text/csv",
                 type="primary",
                 use_container_width=True,
+            )
+            st.warning(
+                "⚠️ 作成したCSVファイルをExcelで開くとID番号の先頭の0が外れ、"
+                "取り込み時にエラーが発生します。\n"
+                "CSVファイルはExcelで開かず、そのままBill Oneにアップロードしてください。"
             )
             st.caption(
                 "※ tax_rateのIDは経理確認後に更新予定  ·  "

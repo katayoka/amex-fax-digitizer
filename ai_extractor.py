@@ -311,6 +311,25 @@ def records_to_dataframe(merged_records: list[dict]) -> pd.DataFrame:
 
 
 # =====================================================================
+# 広告内訳データ取得
+# =====================================================================
+
+def get_ad_details(raw_records: list[dict]) -> dict[str, list[tuple]]:
+    """
+    生レコードから広告種別ごとの内訳（日付・金額）を返す。
+    Returns: {"Google広告": [("2024-05-01", 30000), ...], "Meta広告": [...]}
+    """
+    details: dict[str, list[tuple]] = {}
+    for rec in raw_records:
+        ad_type = _detect_ad_type(rec.get("vendor", ""))
+        if ad_type:
+            date_str = rec.get("date") or "日付不明"
+            amount   = rec.get("amount", 0)
+            details.setdefault(ad_type, []).append((date_str, amount))
+    return details
+
+
+# =====================================================================
 # 公開エントリーポイント
 # =====================================================================
 
@@ -352,4 +371,9 @@ def extract_and_aggregate(
     merged = merge_ad_records(raw_records)
 
     # 4. COLUMNS準拠DataFrameに変換
-    return records_to_dataframe(merged)
+    df = records_to_dataframe(merged)
+
+    # 5. 広告内訳データ（Step 2.6用）
+    ad_details = get_ad_details(raw_records)
+
+    return df, ad_details
