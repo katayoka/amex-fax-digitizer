@@ -5,6 +5,7 @@ import pandas as pd
 # ai_extractorは同ディレクトリに配置
 from ai_extractor import extract_and_aggregate, COLUMNS
 from bill_one_exporter import to_bill_one_csv_bytes
+from master import lookup, add_to_runtime_master, TAX_RATE_OPTIONS_BILLONE, TAX_RATE_BILLONE_TO_APP
 
 # =====================================================================
 # ページ設定
@@ -25,6 +26,9 @@ if "receipts" not in st.session_state:
     st.session_state.receipts = {}   # {idx: uploaded_file}
 if "confirmed" not in st.session_state:
     st.session_state.confirmed = False
+if "tax_review" not in st.session_state:
+    # {idx: {"formal_name": str, "tax_rate_display": str, "unmatched": bool}}
+    st.session_state.tax_review = {}
 
 # =====================================================================
 # サイドバー：Step 1 FAX明細アップロード
@@ -81,6 +85,16 @@ if run_btn and uploaded_file is not None and api_key:
             st.session_state.ocr_done = True
             st.session_state.confirmed = False
             st.session_state.receipts = {}
+            # マスタ照合：税率・正式備考名を自動セット
+            tax_review = {}
+            for idx, row in df_result.iterrows():
+                result = lookup(str(row.get("備考", "") or ""))
+                tax_review[idx] = {
+                    "formal_name": result.formal_name,
+                    "tax_rate_display": result.tax_rate_display,
+                    "unmatched": not result.matched,
+                }
+            st.session_state.tax_review = tax_review
             st.sidebar.success(
                 f"✅ データ化完了！  {len(df_result)} 行を抽出しました。"
             )
@@ -136,6 +150,77 @@ else:
 
     # 編集内容をセッションに反映
     st.session_state.df = edited_df
+
+    # ------------------------------------------------------------------
+    # Step 2.5：税率・正式備考名の確認
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🏷️ Step 2.5 ｜ 税率・正式備考名の確認")
+
+    if st.session_state.tax_review:
+        unmatched_count = sum(1 for v in st.session_state.tax_review.values() if v["unmatched"])
+
+        if unmatched_count > 0:
+            st.warning(f"⚠️ {unmatched_count} 件がマスタ未登録です。税率と正式備考名を確認・選択してください。")
+        else:
+            st.success("✅ 全件マスタ照合済みです。内容を確認してください。")
+
+        review_data = []
+        for idx, row in edited_df.iterrows():
+            rev = st.session_state.tax_review.get(idx, {})
+            review_data.append({
+                "idx": idx,
+                "OCR備考（元データ）": str(row.get("備考", "")),
+                "正式備考名（Bill One用）": rev.get("formal_name", str(row.get("備考", ""))),
+                "税率": rev.get("tax_rate_display", "消費税 10％"),
+                "未登録": rev.get("unmatched", False),
+            })
+
+        for item in review_data:
+            idx = item["idx"]
+            is_unmatched = item["未登録"]
+            border_color = "#ff4b4b" if is_unmatched else "#21c354"
+            label_icon = "🔴 未登録" if is_unmatched else "✅ 照合済"
+
+            with st.expander(
+                f"{label_icon}  {item['OCR備考（元データ）']}  →  {item['正式備考名（Bill One用）']}",
+                expanded=is_unmatched,
+            ):
+                col_name, col_tax = st.columns([2, 1])
+
+                with col_name:
+                    new_name = st.text_input(
+                        "正式備考名（Bill One用）",
+                        value=item["正式備考名（Bill One用）"],
+                        key=f"fname_{idx}",
+                    )
+
+                with col_tax:
+                    current_tax = item["税率"]
+                    default_idx = TAX_RATE_OPTIONS_BILLONE.index(current_tax) if current_tax in TAX_RATE_OPTIONS_BILLONE else 0
+                    new_tax = st.selectbox(
+                        "税率",
+                        options=TAX_RATE_OPTIONS_BILLONE,
+                        index=default_idx,
+                        key=f"taxsel_{idx}",
+                    )
+
+                # セッションに反映
+                st.session_state.tax_review[idx] = {
+                    "formal_name": new_name,
+                    "tax_rate_display": new_tax,
+                    "unmatched": is_unmatched,
+                }
+
+                if is_unmatched:
+                    if st.button("📌 マスタに登録（このセッション内有効）", key=f"reg_{idx}"):
+                        ocr_text = item["OCR備考（元データ）"]
+                        # 最初の単語をキーワードとして登録
+                        kw = ocr_text.split()[0] if ocr_text else ocr_text
+                        add_to_runtime_master(kw, new_name, new_tax)
+                        st.session_state.tax_review[idx]["unmatched"] = False
+                        st.success(f"✅ 「{kw}」をマスタに登録しました")
+                        st.rerun()
 
     # ------------------------------------------------------------------
     # 金額集計セクション
@@ -236,7 +321,14 @@ else:
         st.subheader("📥 Bill One形式 CSVダウンロード")
 
         try:
-            csv_bytes = to_bill_one_csv_bytes(edited_df)
+            # tax_reviewの内容をDataFrameに反映してからCSV化
+            export_df = edited_df.copy()
+            for idx, rev in st.session_state.tax_review.items():
+                if idx in export_df.index:
+                    export_df.at[idx, "備考"] = rev.get("formal_name", export_df.at[idx, "備考"])
+                    tax_app = TAX_RATE_BILLONE_TO_APP.get(rev.get("tax_rate_display", "消費税 10％"), "10%")
+                    export_df.at[idx, "税率"] = tax_app
+            csv_bytes = to_bill_one_csv_bytes(export_df)
             st.download_button(
                 label="⬇️ Bill One CSV をダウンロード",
                 data=csv_bytes,
