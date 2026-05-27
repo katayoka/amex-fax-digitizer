@@ -4,6 +4,7 @@ import pandas as pd
 
 # ai_extractorは同ディレクトリに配置
 from ai_extractor import extract_and_aggregate, COLUMNS
+from bill_one_exporter import to_bill_one_csv_bytes
 
 # =====================================================================
 # ページ設定
@@ -230,19 +231,27 @@ else:
         total_rows = len(edited_df)
         st.write(f"**アップロード済み:** {upload_count} / {total_rows} 件")
 
-        # 保存ボタン
-        save_btn = st.button(
-            "💾 確定データをデータベースに保存",
-            type="primary",
-            use_container_width=True,
-        )
-        if save_btn:
-            # TODO: Phase②でSQLite保存を実装
-            st.success(
-                "✅ データを保存しました。"
-                "（Phase② で SQLite への永続化と Bill One CSV エクスポートを実装予定）"
+        # Bill One CSV ダウンロード
+        st.markdown("---")
+        st.subheader("📥 Bill One形式 CSVダウンロード")
+
+        try:
+            csv_bytes = to_bill_one_csv_bytes(edited_df)
+            st.download_button(
+                label="⬇️ Bill One CSV をダウンロード",
+                data=csv_bytes,
+                file_name=f"billone_{month_label.replace('年','').replace('月','')}.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True,
             )
-            st.balloons()
+            st.caption(
+                "※ tax_rateのIDは経理確認後に更新予定  ·  "
+                "文字コード: UTF-8  ·  "
+                f"出力行数: {len(edited_df)}行"
+            )
+        except Exception as e:
+            st.error(f"CSV生成エラー: {e}")
 
 # =====================================================================
 # フッター
