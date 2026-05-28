@@ -88,6 +88,7 @@ if run_btn and uploaded_file is not None and api_key:
             st.session_state.df = df_result
             st.session_state.ad_details = ad_details
             st.session_state.new_charges_total = new_charges_total
+            st.session_state.ad_manual = {"Google広告": [], "Meta広告": []}
             st.session_state.ocr_done = True
             st.session_state.confirmed = False
             st.session_state.receipts = {}
@@ -234,52 +235,89 @@ else:
     st.markdown("---")
     st.subheader("📋 Step 2.6 ｜ 広告費内訳CSVダウンロード")
 
-    if "ad_details" in st.session_state and st.session_state.ad_details:
-        col_g, col_m = st.columns(2)
+    # 広告内訳の手動補完データをセッションで管理
+    if "ad_manual" not in st.session_state:
+        st.session_state.ad_manual = {"Google広告": [], "Meta広告": []}
 
-        with col_g:
-            google_details = st.session_state.ad_details.get("Google広告", [])
-            if google_details:
-                import io as _io
-                import pandas as _pd
-                g_df = _pd.DataFrame(google_details, columns=["日付", "金額(税込)"])
-                g_buf = _io.StringIO()
-                g_df.to_csv(g_buf, index=False, encoding="utf-8")
-                g_total = g_df["金額(税込)"].sum()
-                st.write(f"**Google広告内訳** （{len(google_details)}件 / 合計 ¥{g_total:,}）")
-                st.dataframe(g_df, use_container_width=True, hide_index=True)
-                st.download_button(
-                    label="⬇️ Google広告内訳CSVをダウンロード",
-                    data=g_buf.getvalue().encode("utf-8"),
-                    file_name=f"google_ad_detail_{month_label.replace('年','').replace('月','')}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-            else:
-                st.info("Google広告の明細データがありません")
+    def render_ad_detail(ad_type, file_suffix):
+        import io as _io
+        import pandas as _pd
 
-        with col_m:
-            meta_details = st.session_state.ad_details.get("Meta広告", [])
-            if meta_details:
-                import io as _io
-                import pandas as _pd
-                m_df = _pd.DataFrame(meta_details, columns=["日付", "金額(税込)"])
-                m_buf = _io.StringIO()
-                m_df.to_csv(m_buf, index=False, encoding="utf-8")
-                m_total = m_df["金額(税込)"].sum()
-                st.write(f"**Meta広告内訳** （{len(meta_details)}件 / 合計 ¥{m_total:,}）")
-                st.dataframe(m_df, use_container_width=True, hide_index=True)
-                st.download_button(
-                    label="⬇️ Meta広告内訳CSVをダウンロード",
-                    data=m_buf.getvalue().encode("utf-8"),
-                    file_name=f"meta_ad_detail_{month_label.replace('年','').replace('月','')}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-            else:
-                st.info("Meta広告の明細データがありません")
-    else:
-        st.info("AIを実行すると広告費の内訳データが表示されます")
+        ocr_rows  = st.session_state.ad_details.get(ad_type, []) if st.session_state.ad_details else []
+        manual_rows = st.session_state.ad_manual.get(ad_type, [])
+        all_rows  = ocr_rows + manual_rows
+
+        st.write(f"**{ad_type}内訳** （{len(all_rows)}件 / 合計 ¥{sum(r[1] for r in all_rows):,}）")
+
+        if all_rows:
+            df_view = _pd.DataFrame(all_rows, columns=["日付", "金額(税込)"])
+            df_view["金額(税込)"] = df_view["金額(税込)"].apply(lambda x: f"¥{int(x):,}")
+            st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+        # 手動追加フォーム
+        with st.expander(f"➕ {ad_type}の取りこぼし行を手動追加"):
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                add_date = st.text_input("日付（YYYY-MM-DD）", key=f"add_date_{file_suffix}",
+                                         placeholder="例: 2026-03-21")
+            with c2:
+                add_amount = st.number_input("金額（税込）", min_value=0, step=1,
+                                             key=f"add_amt_{file_suffix}", format="%d")
+            with c3:
+                st.write("")
+                st.write("")
+                if st.button("追加", key=f"add_btn_{file_suffix}"):
+                    if add_date and add_amount > 0:
+                        st.session_state.ad_manual[ad_type].append((add_date, add_amount))
+
+                        # Step2のdf内の合算行も金額を更新
+                        for idx, row in st.session_state.df.iterrows():
+                            if ad_type in str(row.get("備考", "")):
+                                new_total = sum(r[1] for r in st.session_state.ad_details.get(ad_type, []))                                           + sum(r[1] for r in st.session_state.ad_manual[ad_type])
+                                st.session_state.df.at[idx, "按分金額(税込)"] = new_total
+                                # 税額再計算
+                                tax_rate_str = str(row.get("税率", "10%"))
+                                rate = {"10%": 10, "8%": 8, "0%不課税": 0}.get(tax_rate_str, 10)
+                                st.session_state.df.at[idx, "税額"] = round(new_total * rate / (100 + rate)) if rate else 0
+                                # 件数表示を更新
+                                import re as _re
+                                new_count = len(st.session_state.ad_details.get(ad_type, []))                                           + len(st.session_state.ad_manual[ad_type])
+                                備考 = str(row.get("備考", ""))
+                                備考 = _re.sub(r"計\d+回分", f"計{new_count}回分", 備考)
+                                st.session_state.df.at[idx, "備考"] = 備考
+                        st.success(f"追加しました（{add_date} / ¥{add_amount:,}）")
+                        st.rerun()
+
+        # 手動追加分の削除ボタン
+        if manual_rows:
+            with st.expander(f"🗑️ 手動追加分を削除"):
+                for i, (d, a) in enumerate(manual_rows):
+                    col_info, col_del = st.columns([3, 1])
+                    col_info.write(f"{d}　¥{int(a):,}")
+                    if col_del.button("削除", key=f"del_{file_suffix}_{i}"):
+                        st.session_state.ad_manual[ad_type].pop(i)
+                        st.rerun()
+
+        # CSVダウンロード
+        if all_rows:
+            dl_df  = _pd.DataFrame(all_rows, columns=["日付", "金額(税込)"])
+            dl_buf = _io.StringIO()
+            dl_df.to_csv(dl_buf, index=False, encoding="utf-8")
+            st.download_button(
+                label=f"⬇️ {ad_type}内訳CSVをダウンロード",
+                data=dl_buf.getvalue().encode("utf-8"),
+                file_name=f"{file_suffix}_detail_{month_label.replace('年','').replace('月','')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        else:
+            st.info(f"{ad_type}の明細データがありません")
+
+    col_g, col_m = st.columns(2)
+    with col_g:
+        render_ad_detail("Google広告", "google_ad")
+    with col_m:
+        render_ad_detail("Meta広告", "meta_ad")
 
     # ------------------------------------------------------------------
     # 金額集計セクション

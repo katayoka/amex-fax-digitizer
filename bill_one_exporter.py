@@ -31,11 +31,11 @@ BILL_ONE_COLUMNS = [
     "extension_field_15",
 ]
 
-# 税率変換：アプリ内表記 → Bill One表記
+# 税率変換：アプリ内表記 → Bill One CSVインポート用コード
 TAX_RATE_MAP = {
-    "10%":      "消費税 10％",
-    "8%":       "消費税 8％",
-    "0%不課税":  "消費税 0％ 不課税",
+    "10%":      "JPN_1000_CTax",
+    "8%":       "JPN_800_CTax",
+    "0%不課税":  "JPN_000_CTax_Untaxable",
 }
 
 # ブランド名 → extension_field_1 ID（0埋め4桁テキスト）
@@ -185,9 +185,17 @@ def to_bill_one_df(source_df: pd.DataFrame) -> pd.DataFrame:
         if tax_rate == "0%不課税":
             tax_amount = 0
 
+        # ラベル（"消費税 10％"等）またはアプリ内表記（"10%"等）の両方に対応
+        # まずアプリ内表記→ラベル→コードの順で変換を試みる
+        from master import TAX_RATE_LABEL_TO_CODE, TAX_RATE_APP_TO_BILLONE
+        label = TAX_RATE_APP_TO_BILLONE.get(tax_rate, tax_rate)  # "10%" → "消費税 10％"
+        tax_code = TAX_RATE_LABEL_TO_CODE.get(label,
+                   TAX_RATE_LABEL_TO_CODE.get(tax_rate,
+                   TAX_RATE_MAP.get(tax_rate, "JPN_1000_CTax")))  # 最終フォールバック
+
         bill_row = {
             "prorated_amount":  amount,
-            "tax_rate":         TAX_RATE_MAP.get(tax_rate, "消費税 10％"),
+            "tax_rate":         tax_code,
             "tax_amount":       tax_amount,
             "description":      "",                                         # 任意項目（空欄）
             "extension_field_1":  _extract_brand_id(row),                  # ブランドID

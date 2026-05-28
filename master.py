@@ -67,13 +67,25 @@ def add_to_runtime_master(keyword: str, formal_name: str, tax_rate: str, note: s
 # マッチング関数
 # =====================================================================
 
+# アプリ内表記（10%等）→ 表示ラベル（消費税 10％等）
 TAX_RATE_APP_TO_BILLONE = {
-    "消費税 10％":      "10%",
-    "消費税 8％":       "8%",
-    "消費税 0％ 不課税": "0%不課税",
+    "10%":      "消費税 10％",
+    "8%":       "消費税 8％",
+    "0%不課税":  "消費税 0％ 不課税",
 }
 
-TAX_RATE_BILLONE_TO_APP = {v: k for k, v in TAX_RATE_APP_TO_BILLONE.items()}
+# 表示ラベル → アプリ内表記
+TAX_RATE_BILLONE_TO_APP = {
+    "消費税 10％":                        "10%",
+    "消費税 8％":                         "8%",
+    "消費税 0％ 不課税":                   "0%不課税",
+    "消費税 0％ 非課税":                   "0%不課税",
+    "消費税 0％ 免税":                     "0%不課税",
+    "消費税 10％-郵便切手等特例":           "10%",
+    "消費税 10％-出張旅費特例":             "10%",
+    "消費税 10％-非適格事業者(80%控除)":   "10%",
+    "消費税 8％-非適格事業者(80%控除)":    "8%",
+}
 
 
 @dataclass
@@ -133,7 +145,21 @@ def lookup(ocr_text: str) -> MatchResult:
 
 
 # =====================================================================
-# Bill One税率選択肢
+# Bill One税率選択肢・CSVインポートコード対応表
 # =====================================================================
-TAX_RATE_OPTIONS_BILLONE = ["消費税 10％", "消費税 0％ 不課税", "消費税 8％"]
+
+# 表示ラベル → Bill One CSVインポートコード
+TAX_RATE_LABEL_TO_CODE = {
+    "消費税 10％":                        "JPN_1000_CTax",
+    "消費税 8％":                         "JPN_800_CTax",
+    "消費税 0％ 不課税":                   "JPN_000_CTax_Untaxable",
+    "消費税 0％ 非課税":                   "JPN_000_CTax_Non_Taxable",
+    "消費税 0％ 免税":                     "JPN_000_CTax_Exemption",
+    "消費税 10％-郵便切手等特例":           "JPN_1000_CTax_Postage_Stamps",
+    "消費税 10％-出張旅費特例":             "JPN_1000_CTax_Public_Transportation",
+    "消費税 10％-非適格事業者(80%控除)":   "JPN_Unqualified_1000_CTax",
+    "消費税 8％-非適格事業者(80%控除)":    "JPN_Unqualified_800_CTax",
+}
+
+TAX_RATE_OPTIONS_BILLONE = list(TAX_RATE_LABEL_TO_CODE.keys())
 TAX_RATE_OPTIONS_APP     = ["10%", "0%不課税", "8%"]
