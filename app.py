@@ -28,6 +28,8 @@ if "confirmed" not in st.session_state:
     st.session_state.confirmed = False
 if "ad_details" not in st.session_state:
     st.session_state.ad_details = {}
+if "new_charges_total" not in st.session_state:
+    st.session_state.new_charges_total = None
 if "tax_review" not in st.session_state:
     # {idx: {"formal_name": str, "tax_rate_display": str, "unmatched": bool}}
     st.session_state.tax_review = {}
@@ -77,7 +79,7 @@ if run_btn and uploaded_file is not None and api_key:
         "（ページ数によって数秒〜数十秒かかります）"
     ):
         try:
-            df_result, ad_details = extract_and_aggregate(
+            df_result, ad_details, new_charges_total = extract_and_aggregate(
                 file_bytes=uploaded_file.read(),
                 filename=uploaded_file.name,
                 month_label=month_label,
@@ -85,6 +87,7 @@ if run_btn and uploaded_file is not None and api_key:
             )
             st.session_state.df = df_result
             st.session_state.ad_details = ad_details
+            st.session_state.new_charges_total = new_charges_total
             st.session_state.ocr_done = True
             st.session_state.confirmed = False
             st.session_state.receipts = {}
@@ -286,15 +289,23 @@ else:
 
     total_calculated = int(edited_df["按分金額(税込)"].fillna(0).sum())
 
+    # OCRで取得した新規ご利用金額を初期値にセット
+    ocr_total = st.session_state.get("new_charges_total", None)
+    invoice_default = int(ocr_total) if ocr_total is not None else total_calculated
+
     col_input, col_spacer = st.columns([1, 2])
     with col_input:
         total_invoice = st.number_input(
-            "AMEX 全体の総請求金額（税込）",
+            "新規ご利用金額（税込）",
             min_value=0,
-            value=total_calculated,
+            value=invoice_default,
             step=1,
-            help="AMEX明細の合計金額を入力してください",
+            help="PDFヘッダーの「新規ご利用金額」をAIが自動読み取りします。修正も可能です。",
         )
+    if ocr_total is not None:
+        st.caption(f"💡 AIがPDFから自動読み取り: ¥{int(ocr_total):,}")
+    else:
+        st.caption("💡 AIが「新規ご利用金額」を読み取れなかった場合は手動で入力してください")
 
     diff = total_invoice - total_calculated
 

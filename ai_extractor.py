@@ -87,25 +87,30 @@ def file_to_images_b64(file_bytes: bytes, filename: str) -> list[dict]:
 # =====================================================================
 
 SYSTEM_PROMPT = """あなたはAMEX（アメリカン・エキスプレス）のFAX明細を読み取る経理専門AIです。
-与えられた明細画像を正確に読み取り、以下のJSON形式で全明細行を出力してください。
+与えられた明細画像を正確に読み取り、以下のJSON形式で出力してください。
 
 出力ルール：
-1. 必ずJSON配列のみを出力し、前後に余分なテキストを付けないこと。
-2. 各行は以下のキーを持つオブジェクトとする：
+1. 必ず以下の構造のJSONオブジェクトのみを出力し、前後に余分なテキストを付けないこと。
+2. "new_charges_total" には明細ヘッダーの「新規ご利用金額」の数値を入れること（見つからない場合はnull）。
+3. "records" には各明細行を配列で入れること。各行のキー：
    - vendor: 加盟店名（原文のまま）
    - amount: 税込金額（数値、円）
    - date: 利用日（YYYY-MM-DD形式、不明な場合はnull）
    - tax_rate: 税率（"10%"/"8%"/"0%不課税" のいずれか、不明なら"10%"）
    - raw_description: 明細の生テキスト（原文のまま）
-3. 金額は数値型（カンマ・円記号なし）で出力すること。
-4. 1枚の明細画像に複数行ある場合はすべて出力すること。
-5. 合計行・小計行は除外すること。
+4. 金額は数値型（カンマ・円記号なし）で出力すること。
+5. 1枚の明細画像に複数行ある場合はすべて出力すること。
+6. 合計行・小計行は除外すること。
+7. 「新規ご利用金額」は明細上部のサマリー欄に記載されている（例：新規ご利用金額 1,363,945）。
 
 出力例：
-[
-  {"vendor": "Google*Ads1234567", "amount": 55000, "date": "2024-05-03", "tax_rate": "10%", "raw_description": "Google*Ads1234567 55,000円"},
-  {"vendor": "〇〇事務用品", "amount": 15400, "date": "2024-05-10", "tax_rate": "10%", "raw_description": "〇〇事務用品店 15,400円"}
-]"""
+{
+  "new_charges_total": 1363945,
+  "records": [
+    {"vendor": "Google*Ads1234567", "amount": 55000, "date": "2024-05-03", "tax_rate": "10%", "raw_description": "Google*Ads1234567 55,000円"},
+    {"vendor": "〇〇事務用品", "amount": 15400, "date": "2024-05-10", "tax_rate": "10%", "raw_description": "〇〇事務用品店 15,400円"}
+  ]
+}"""
 
 
 def ocr_with_claude(images_b64: list[dict], api_key: str, month_label: str) -> list[dict]:
@@ -146,13 +151,29 @@ def ocr_with_claude(images_b64: list[dict], api_key: str, month_label: str) -> l
         raw_text = json_match.group(1)
 
     try:
-        return json.loads(raw_text)
+        parsed = json.loads(raw_text)
     except json.JSONDecodeError:
-        # フォールバック：配列部分だけ取り出す
+        # フォールバック：オブジェクト or 配列を取り出す
+        obj_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
         arr_match = re.search(r"\[.*\]", raw_text, re.DOTALL)
-        if arr_match:
-            return json.loads(arr_match.group(0))
-        raise ValueError(f"Claude APIのレスポンスをJSONとして解析できませんでした:\n{raw_text}")
+        if obj_match:
+            parsed = json.loads(obj_match.group(0))
+        elif arr_match:
+            # 旧形式（配列のみ）へのフォールバック
+            return json.loads(arr_match.group(0)), None
+        else:
+            raise ValueError(f"Claude APIのレスポンスをJSONとして解析できませんでした:\n{raw_text}")
+
+    # 新形式：{"new_charges_total": ..., "records": [...]}
+    if isinstance(parsed, dict) and "records" in parsed:
+        new_charges_total = parsed.get("new_charges_total", None)
+        return parsed["records"], new_charges_total
+
+    # 旧形式フォールバック：配列そのまま
+    if isinstance(parsed, list):
+        return parsed, None
+
+    raise ValueError(f"予期しないJSONフォーマットです:\n{raw_text}")
 
 
 # =====================================================================
@@ -364,8 +385,8 @@ def extract_and_aggregate(
     # 1. ファイル → base64画像
     images_b64 = file_to_images_b64(file_bytes, filename)
 
-    # 2. Claude Vision でOCR
-    raw_records = ocr_with_claude(images_b64, api_key, month_label)
+    # 2. Claude Vision でOCR（新規ご利用金額も同時取得）
+    raw_records, new_charges_total = ocr_with_claude(images_b64, api_key, month_label)
 
     # 3. 広告費を自動集計
     merged = merge_ad_records(raw_records)
@@ -376,4 +397,4 @@ def extract_and_aggregate(
     # 5. 広告内訳データ（Step 2.6用）
     ad_details = get_ad_details(raw_records)
 
-    return df, ad_details
+    return df, ad_details, new_charges_total
