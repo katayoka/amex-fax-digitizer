@@ -411,7 +411,7 @@ else:
                 with upload_col:
                     receipt = st.file_uploader(
                         "領収書をアップロード",
-                        type=["pdf", "png", "jpg", "jpeg"],
+                        type=["pdf", "png", "jpg", "jpeg", "csv", "xlsx", "xls"],
                         key=f"receipt_{idx}",
                         label_visibility="collapsed",
                     )
