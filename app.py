@@ -300,7 +300,13 @@ else:
 
         # CSVダウンロード
         if all_rows:
-            dl_df  = _pd.DataFrame(all_rows, columns=["日付", "金額(税込)"])
+            dl_df = _pd.DataFrame(all_rows, columns=["日付", "金額(税込)"])
+            # 金額にコンマを付ける
+            dl_df["金額(税込)"] = dl_df["金額(税込)"].apply(lambda x: f"{int(x):,}")
+            # 合計行を追加
+            total = sum(r[1] for r in all_rows)
+            total_row = _pd.DataFrame([["合計", f"{total:,}"]], columns=["日付", "金額(税込)"])
+            dl_df = _pd.concat([dl_df, total_row], ignore_index=True)
             dl_buf = _io.StringIO()
             dl_df.to_csv(dl_buf, index=False, encoding="utf-8")
             st.download_button(
