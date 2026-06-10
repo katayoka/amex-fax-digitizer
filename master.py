@@ -37,13 +37,13 @@ INITIAL_MASTER: list[MasterEntry] = [
     MasterEntry("Meta広告",             "Meta AD出稿費",                         "消費税 0％ 不課税", "広告費"),
 
     # --- 通信・電話 ---
-    MasterEntry("NTT",                  "VOGUE Collection NTT電話利用料",        "消費税 10％",      "通信費"),
+    MasterEntry("NTT",                  "VOGUE Collection NTT電話利用料",        "消費税 10％-非適格事業者(80%控除)",      "通信費"),
 
     # --- SaaSツール ---
     MasterEntry("POWER MY ANALYTICS",  "GQ SHOP Power My Analytics利用料",      "消費税 0％ 不課税", "ツール"),
     MasterEntry("LINE",                 "LINEアカウント料",                       "消費税 10％",      "ツール"),
     MasterEntry("SHOPIFY",              "GQ SHOP SHOPIFY 利用料",                "消費税 0％ 不課税", "ツール"),
-    MasterEntry("PADDLE",               "GQ SHOP PADDLE NETアカウント利用料",    "消費税 10％",      "ツール"),
+    MasterEntry("PADDLE",               "GQ SHOP PADDLE NETアカウント利用料",    "消費税 0％ 不課税",      "ツール"),
     MasterEntry("PAYPAL",               "PAYPAL *CANVA利用料",                   "消費税 0％ 不課税", "ツール"),
 ]
 
