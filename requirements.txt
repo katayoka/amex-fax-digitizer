@@ -1,6 +1,7 @@
-﻿streamlit
-anthropic
-pymupdf
-pypdf
-pdfplumber
-pandas
+streamlit>=1.32.0
+anthropic>=0.25.0
+pymupdf>=1.24.0
+pypdf>=4.0.0
+pdfplumber>=0.10.0
+pandas>=2.0.0
+httpx>=0.27.0
