@@ -434,8 +434,9 @@ else:
             for idx, rev in st.session_state.tax_review.items():
                 if idx in export_df.index:
                     export_df.at[idx, "備考"] = rev.get("formal_name", export_df.at[idx, "備考"])
-                    tax_app = TAX_RATE_BILLONE_TO_APP.get(rev.get("tax_rate_display", "消費税 10％"), "10%")
-                    export_df.at[idx, "税率"] = tax_app
+                    # Bill Oneラベルをそのまま渡す（アプリ内表記に変換しない）
+                    # bill_one_exporter側でラベル→CSVコードに変換する
+                    export_df.at[idx, "税率"] = rev.get("tax_rate_display", "消費税 10％")
             csv_bytes = to_bill_one_csv_bytes(export_df)
             st.download_button(
                 label="⬇️ Bill One CSV をダウンロード",
