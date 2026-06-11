@@ -429,15 +429,51 @@ else:
         st.subheader("📥 Step 5 ｜ Bill One形式 CSVダウンロード")
 
         try:
-            # tax_reviewの内容をDataFrameに反映してからCSV化
+            # tax_reviewの内容をDataFrameに反映
             export_df = edited_df.copy()
             for idx, rev in st.session_state.tax_review.items():
                 if idx in export_df.index:
                     export_df.at[idx, "備考"] = rev.get("formal_name", export_df.at[idx, "備考"])
-                    # Bill Oneラベルをそのまま渡す（アプリ内表記に変換しない）
-                    # bill_one_exporter側でラベル→CSVコードに変換する
                     export_df.at[idx, "税率"] = rev.get("tax_rate_display", "消費税 10％")
-            csv_bytes = to_bill_one_csv_bytes(export_df)
+
+            # Bill One形式に変換
+            from bill_one_exporter import to_bill_one_df, to_bill_one_csv_bytes, BILL_ONE_COLUMNS
+            bill_df = to_bill_one_df(export_df)
+
+            # プレビュー編集テーブル
+            st.write("ダウンロード前に内容を確認・修正できます。**0始まりのIDも正確に表示されます。**")
+
+            edited_bill_df = st.data_editor(
+                bill_df,
+                num_rows="fixed",
+                column_config={
+                    "prorated_amount":   st.column_config.NumberColumn("按分金額", format="¥%d"),
+                    "tax_rate":          st.column_config.TextColumn("税率コード", width="medium"),
+                    "tax_amount":        st.column_config.NumberColumn("税額", format="¥%d"),
+                    "description":       st.column_config.TextColumn("備考", width="small"),
+                    "extension_field_1": st.column_config.TextColumn("ブランドID", width="small"),
+                    "extension_field_5": st.column_config.TextColumn("SC", width="small"),
+                    "extension_field_6": st.column_config.TextColumn("CC", width="small"),
+                    "extension_field_7": st.column_config.TextColumn("PT", width="small"),
+                    "extension_field_8": st.column_config.TextColumn("正式備考名", width="large"),
+                    "extension_field_9": st.column_config.TextColumn("リソースタイプ", width="small"),
+                    "extension_field_10": st.column_config.TextColumn("費用集計", width="small"),
+                    "extension_field_11": st.column_config.TextColumn("予備", width="small"),
+                    "extension_field_12": st.column_config.TextColumn("ジョブコード", width="medium"),
+                    "extension_field_13": st.column_config.TextColumn("発生源", width="small"),
+                    "extension_field_14": st.column_config.NumberColumn("数量", width="small"),
+                    "extension_field_15": st.column_config.TextColumn("単位", width="small"),
+                },
+                use_container_width=True,
+                key="bill_one_editor",
+            )
+
+            # 編集済みDataFrameからCSV生成
+            import io as _io
+            buf = _io.StringIO()
+            edited_bill_df.to_csv(buf, index=False, encoding="utf-8")
+            csv_bytes = buf.getvalue().encode("utf-8")
+
             st.download_button(
                 label="⬇️ Bill One CSV をダウンロード",
                 data=csv_bytes,
@@ -451,13 +487,11 @@ else:
                 "取り込み時にエラーが発生します。\n"
                 "CSVファイルはExcelで開かず、そのままBill Oneにアップロードしてください。"
             )
-            st.caption(
-                "※ tax_rateのIDは経理確認後に更新予定  ·  "
-                "文字コード: UTF-8  ·  "
-                f"出力行数: {len(edited_df)}行"
-            )
+            st.caption(f"文字コード: UTF-8  ·  出力行数: {len(edited_bill_df)}行")
+
         except Exception as e:
             st.error(f"CSV生成エラー: {e}")
+            raise
 
 # =====================================================================
 # フッター
