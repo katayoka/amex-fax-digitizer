@@ -127,6 +127,7 @@ else:
     )
 
     # カラム幅のカスタム設定
+    # 税率・税額はStep2.5で確定するためStep2では非表示
     edited_df = st.data_editor(
         st.session_state.df,
         num_rows="dynamic",
@@ -134,12 +135,8 @@ else:
             "按分金額(税込)": st.column_config.NumberColumn(
                 "按分金額(税込)", format="¥%d", min_value=0
             ),
-            "税額": st.column_config.NumberColumn(
-                "税額", format="¥%d", min_value=0
-            ),
-            "税率": st.column_config.SelectboxColumn(
-                "税率", options=["10%", "8%", "0%不課税"]
-            ),
+            "税率": None,
+            "税額": None,
             "数量": st.column_config.NumberColumn(
                 "数量", min_value=1, default=1
             ),
