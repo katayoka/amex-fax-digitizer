@@ -393,7 +393,7 @@ else:
 
         upload_count = 0
         for idx, row in edited_df.iterrows():
-            amount_str = f"¥{int(row['按分金額(税込)']):,}"
+            amount_str = f"¥{int(row['按分金額(税込)'] or 0):,}"
             label = f"【明細 {idx + 1}】 {row['備考']}  {amount_str}"
 
             with st.expander(label, expanded=(idx == 0)):
