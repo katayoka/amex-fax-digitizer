@@ -53,7 +53,7 @@ INITIAL_MASTER: list[MasterEntry] = [
     MasterEntry("LINE",                 "LINEアカウント料",                   "消費税 10％",       "ツール"),
     MasterEntry("SHOPIFY",              "GQ SHOP SHOPIFY 利用料",            "消費税 0％ 不課税", "ツール"),
     MasterEntry("PADDLE",               "GQ SHOP PADDLE NETアカウント利用料","消費税 0％ 不課税", "ツール"),
-    MasterEntry("PAYPAL",               "PAYPAL *CANVA利用料",               "消費税 0％ 不課税", "ツール"),
+    MasterEntry("PAYPAL",               "PAYPAL *CANVA利用料",               "消費税 10％",       "ツール"),
 ]
 
 # =====================================================================
