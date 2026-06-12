@@ -57,6 +57,12 @@ BRAND_KEYWORD_MAP = {
 }
 DEFAULT_BRAND_ID = "0120"  # 判定できない場合はGQ
 
+# 広告費の正式備考名キーワード → ブランドID（通常のブランド判定より優先）
+AD_FORMAL_NAME_BRAND_MAP = {
+    "Google AD出稿費":  "0175",   # WIRED
+    "Meta AD出稿費":    "0100",   # VOGUE
+}
+
 # ブランドIDに対応するコストセンター（Excelマスタより）
 BRAND_COST_CENTER_MAP = {
     "0120": "00331",   # GQ    → Other Consumer COGs
@@ -76,15 +82,26 @@ BRAND_PT_MAP = {
 # =====================================================================
 
 def _extract_brand_id(row: pd.Series) -> str:
-    """備考の先頭キーワードからブランドIDを判定する"""
-    desc = str(row.get("備考", "") or "").strip().upper()
-    for keyword, brand_id in BRAND_KEYWORD_MAP.items():
-        if desc.startswith(keyword):
+    """備考の正式名称からブランドIDを判定する。広告費は専用マップを優先。"""
+    desc = str(row.get("備考", "") or "").strip()
+
+    # ① 広告費専用マップ（正式備考名の末尾キーワードで判定）
+    for keyword, brand_id in AD_FORMAL_NAME_BRAND_MAP.items():
+        if keyword in desc:
             return brand_id
+
+    # ② 通常ブランドキーワード（先頭一致）
+    desc_upper = desc.upper()
+    for keyword, brand_id in BRAND_KEYWORD_MAP.items():
+        if desc_upper.startswith(keyword):
+            return brand_id
+
+    # ③ ブランド列フォールバック
     brand = str(row.get("ブランド", "") or "").strip().upper()
     for keyword, brand_id in BRAND_KEYWORD_MAP.items():
         if keyword in brand:
             return brand_id
+
     return DEFAULT_BRAND_ID
 
 
@@ -186,9 +203,9 @@ def to_bill_one_df(source_df: pd.DataFrame) -> pd.DataFrame:
             "tax_rate":          tax_code,
             "tax_amount":        tax_amount,
             "description":       "",
-            "extension_field_1": brand_id,
+            "extension_field_1": str(brand_id),                                    # 0落ち防止で文字列
             "extension_field_5": _extract_sc_code(str(row.get("按分仕訳勘定(税込)", "") or "")),
-            "extension_field_6": BRAND_COST_CENTER_MAP.get(brand_id, "00331"),
+            "extension_field_6": str(BRAND_COST_CENTER_MAP.get(brand_id, "00331")), # 0落ち防止で文字列
             "extension_field_7": BRAND_PT_MAP.get(brand_id, "PT133"),
             "extension_field_8": str(row.get("備考", "") or ""),
             "extension_field_9": str(row.get("リソースタイプ(SC0267選択時必須)", "") or ""),
