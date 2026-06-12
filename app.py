@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 
@@ -48,9 +49,12 @@ if not api_key:
         help="ANTHROPIC_API_KEY 環境変数が設定されていれば空欄でOKです",
     )
 
+# 現在の年月を自動セット
+_now = datetime.now()
+_default_month = f"{_now.year}年{_now.month}月"
 month_label = st.sidebar.text_input(
     "対象月（表示用）",
-    value="2024年5月",
+    value=_default_month,
     help="例: 2024年5月  → Google広告 2024年5月度合算、と表示されます",
 )
 
