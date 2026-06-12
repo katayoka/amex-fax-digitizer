@@ -63,6 +63,19 @@ AD_FORMAL_NAME_BRAND_MAP = {
     "Meta AD出稿費":    "0100",   # VOGUE
 }
 
+# Google広告専用SC・PT（他の費用と異なる）
+GOOGLE_AD_SC = "SC1118"
+GOOGLE_AD_PT = "PT003"
+
+# ジョブコードを固定で入れる備考名キーワード
+JOB_CODE_MAP = {
+    "GOOGLE ONE利用料":                  "JP_FIN000056",
+    "GQ SHOP Power My Analytics利用料":  "JP_FIN000056",
+    "GQ SHOP SHOPIFY 利用料":            "JP_FIN000056",
+    "GQ SHOP PADDLE NETアカウント利用料": "JP_FIN000056",
+    "PAYPAL *CANVA利用料":               "JP_FIN000056",
+}
+
 # ブランドIDに対応するコストセンター（Excelマスタより）
 BRAND_COST_CENTER_MAP = {
     "0120": "00331",   # GQ    → Other Consumer COGs
@@ -198,20 +211,36 @@ def to_bill_one_df(source_df: pd.DataFrame) -> pd.DataFrame:
         # ブランドID
         brand_id = _extract_brand_id(row)
 
+        備考str = str(row.get("備考", "") or "")
+
+        # Google広告はSC・PTが専用値
+        is_google_ad = "Google AD出稿費" in 備考str
+        sc_code = GOOGLE_AD_SC if is_google_ad else _extract_sc_code(str(row.get("按分仕訳勘定(税込)", "") or ""))
+        pt_code = GOOGLE_AD_PT if is_google_ad else BRAND_PT_MAP.get(brand_id, "PT133")
+
+        # ジョブコード：マスタに定義されていれば固定値、なければDataFrameの値
+        job_code = ""
+        for kw, jc in JOB_CODE_MAP.items():
+            if kw in 備考str:
+                job_code = jc
+                break
+        if not job_code:
+            job_code = str(row.get("ジョブコード", "") or "")
+
         bill_row = {
             "prorated_amount":   amount,
             "tax_rate":          tax_code,
             "tax_amount":        tax_amount,
             "description":       "",
-            "extension_field_1": str(brand_id),                                    # 0落ち防止で文字列
-            "extension_field_5": _extract_sc_code(str(row.get("按分仕訳勘定(税込)", "") or "")),
-            "extension_field_6": str(BRAND_COST_CENTER_MAP.get(brand_id, "00331")), # 0落ち防止で文字列
-            "extension_field_7": BRAND_PT_MAP.get(brand_id, "PT133"),
+            "extension_field_1": str(brand_id),
+            "extension_field_5": sc_code,
+            "extension_field_6": str(BRAND_COST_CENTER_MAP.get(brand_id, "00331")),
+            "extension_field_7": pt_code,
             "extension_field_8": str(row.get("備考", "") or ""),
             "extension_field_9": str(row.get("リソースタイプ(SC0267選択時必須)", "") or ""),
             "extension_field_10": str(row.get("費用集計セグメント(任意)", "") or ""),
             "extension_field_11": "",
-            "extension_field_12": str(row.get("ジョブコード", "") or ""),
+            "extension_field_12": job_code,
             "extension_field_13": _extract_og_code(str(row.get("発生源", "") or "")),
             "extension_field_14": int(row.get("数量", 1) or 1),
             "extension_field_15": _extract_unit(str(row.get("単位", "EA") or "EA")),
